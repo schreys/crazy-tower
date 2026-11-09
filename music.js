@@ -145,6 +145,7 @@ const Techno = (() => {
   }
 
   function tick() {
+    if (ac.state !== "running") return;
     while (nextTime < ac.currentTime + 0.12) {
       play(step, nextTime);
       nextTime += 60 / bpm / 4;
@@ -157,14 +158,18 @@ const Techno = (() => {
       init(audioCtx);
       if (wanted) this.start();
     },
-    // May be called before init; playback then begins as soon as audio is unlocked.
+    // May be called before init or while suspended; playback then begins via resume().
     start() {
       wanted = true;
-      if (!ac || timerId) return;
+      if (!ac || timerId || ac.state !== "running") return;
       randomize();
       step = 0;
       nextTime = ac.currentTime + 0.05;
       timerId = setInterval(tick, 25);
+    },
+    // Call when the AudioContext becomes running to start a pending sequencer.
+    resume() {
+      if (wanted) this.start();
     },
     stop() {
       wanted = false;

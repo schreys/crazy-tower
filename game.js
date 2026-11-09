@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "5";
+const VERSION = "6";
 const DEBUG = new URLSearchParams(location.search).has("debug");
 const debugLog = [];
 function dbg(msg) {
@@ -531,28 +531,23 @@ addEventListener("keydown", (e) => {
   }
 });
 cv.addEventListener("pointerdown", press);
-// Mobile browsers only allow audio to start on pointerup/touchend/click/keydown, not on pointerdown.
+// Touch pointerdown is not a user-activation event in Chrome; pointerup/touchend then complete the unlock.
 function unlockAudio(e) {
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
     dbg(`create on ${e.type} -> ${actx.state}`);
     actx.onstatechange = () => {
       dbg(`state -> ${actx.state}`);
-      // Chrome on Android sometimes suspends a fresh context by itself; take it back.
-      if (actx.state !== "running" && !document.hidden)
-        setTimeout(() => {
-          if (actx.state !== "running" && !document.hidden)
-            actx.resume().then(
-              () => dbg(`auto-resume -> ${actx.state}`),
-              (err) => dbg(`auto-resume fail ${err}`),
-            );
-        }, 300);
+      if (actx.state === "running") Techno.resume();
     };
     Techno.init(actx);
   }
   if (actx.state !== "running")
     actx.resume().then(
-      () => dbg(`resume ok -> ${actx.state}`),
+      () => {
+        dbg(`resume ok -> ${actx.state}`);
+        if (actx.state === "running") Techno.resume();
+      },
       (err) => dbg(`resume fail ${err}`),
     );
 }
@@ -573,7 +568,7 @@ if (DEBUG)
         ),
       true,
     );
-for (const ev of ["pointerup", "touchend", "click", "keydown"])
+for (const ev of ["pointerdown", "pointerup", "touchend", "click", "keydown"])
   addEventListener(ev, unlockAudio, true);
 document.addEventListener("visibilitychange", () => {
   // Never create the context here: there's no user gesture, so it would start blocked.
