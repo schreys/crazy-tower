@@ -146,6 +146,7 @@ const Techno = (() => {
 
   function tick() {
     if (ac.state !== "running") return;
+    if (nextTime < ac.currentTime) nextTime = ac.currentTime + 0.05;
     while (nextTime < ac.currentTime + 0.12) {
       play(step, nextTime);
       nextTime += 60 / bpm / 4;
