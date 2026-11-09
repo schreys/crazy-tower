@@ -1,4 +1,5 @@
 const cv = document.getElementById("game");
+const VERSION = "3";
 const ctx = cv.getContext("2d");
 const W = 480,
   H = 800,
@@ -118,10 +119,6 @@ function spawn() {
 }
 
 function press() {
-  if (!actx) {
-    actx = new (window.AudioContext || window.webkitAudioContext)();
-    Techno.init(actx);
-  }
   if (state === "title" || ((state === "over" || state === "win") && timer > 1))
     return start();
   if (state === "moving") {
@@ -463,6 +460,7 @@ function render(now) {
     text(`Stapel ${TOTAL} blokken!`, W / 2, 420, 24);
     text("Ze worden kleiner en sneller...", W / 2, 455, 18, "#ccc", "#000");
     if (blink) text("DRUK OP SPATIE / DROP", W / 2, 560, 24, "#3cf");
+    text(`v${VERSION}`, W / 2, H - 20, 14, "#888", "#000");
   } else if (state === "over") {
     ctx.fillStyle = "rgba(0,0,0,.55)";
     ctx.fillRect(0, 0, W, H);
@@ -511,9 +509,13 @@ addEventListener("keydown", (e) => {
   }
 });
 cv.addEventListener("pointerdown", press);
-// Mobile browsers only allow audio to start on pointerup/touchend/click, not on pointerdown.
+// Mobile browsers only allow audio to start on pointerup/touchend/click/keydown, not on pointerdown.
 function unlockAudio() {
-  if (actx && actx.state !== "running") actx.resume();
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    Techno.init(actx);
+  }
+  if (actx.state !== "running") actx.resume();
 }
 for (const ev of ["pointerup", "touchend", "click", "keydown"])
   addEventListener(ev, unlockAudio, true);

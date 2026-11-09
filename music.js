@@ -37,6 +37,7 @@ const Techno = (() => {
   let bassPat, accentPat, stabSteps, root;
   let ac, out, noise;
   let timerId = null,
+    wanted = false,
     step = 0,
     nextTime = 0;
   let bpm = 126,
@@ -152,8 +153,13 @@ const Techno = (() => {
   }
 
   return {
-    init,
+    init(audioCtx) {
+      init(audioCtx);
+      if (wanted) this.start();
+    },
+    // May be called before init; playback then begins as soon as audio is unlocked.
     start() {
+      wanted = true;
       if (!ac || timerId) return;
       randomize();
       step = 0;
@@ -161,6 +167,7 @@ const Techno = (() => {
       timerId = setInterval(tick, 25);
     },
     stop() {
+      wanted = false;
       clearInterval(timerId);
       timerId = null;
     },
