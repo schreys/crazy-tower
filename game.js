@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "9";
+const VERSION = "10";
 const DEBUG = new URLSearchParams(location.search).has("debug");
 const debugLog = [];
 function dbg(msg) {
@@ -535,8 +535,12 @@ cv.addEventListener("pointerdown", press);
 // Touch pointerdown is not a user-activation event in Chrome; pointerup/touchend then complete the unlock.
 function unlockAudio(e) {
   if (!actx) {
-    actx = new (window.AudioContext || window.webkitAudioContext)();
-    dbg(`create on ${e.type} -> ${actx.state}`);
+    actx = new (window.AudioContext || window.webkitAudioContext)({
+      latencyHint: "playback",
+    });
+    dbg(
+      `create on ${e.type} -> ${actx.state} base=${actx.baseLatency?.toFixed(3)}`,
+    );
     actx.onstatechange = () => {
       dbg(`state -> ${actx.state}`);
       if (actx.state === "running") Techno.resume();
