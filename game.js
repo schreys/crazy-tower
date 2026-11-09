@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "14";
+const VERSION = "15";
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has("debug");
 // ?latency=interactive|balanced overrides the music context's latencyHint, for comparison.
@@ -69,16 +69,18 @@ let best = +localStorage.getItem("crazyTowerBest") || 0;
 let actx = null,
   mctx = null;
 function beep(f, d = 0.1, type = "square", vol = 0.07, slideTo = 0, delay = 0) {
-  if (!actx) return;
-  const t0 = actx.currentTime + delay;
-  const o = actx.createOscillator(),
-    g = actx.createGain();
+  // The sfx context can stall on Chrome Android; until its clock is seen moving, borrow the music one.
+  const ac = sfxWatch.healthy ? actx : mctx;
+  if (!ac) return;
+  const t0 = ac.currentTime + delay;
+  const o = ac.createOscillator(),
+    g = ac.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f, t0);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + d);
   g.gain.setValueAtTime(vol, t0);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
-  o.connect(g).connect(actx.destination);
+  o.connect(g).connect(ac.destination);
   o.start(t0);
   o.stop(t0 + d);
 }
@@ -504,7 +506,7 @@ function render(now) {
         ? `${c.state} t=${c.currentTime.toFixed(2)} out=${c.outputLatency?.toFixed(3) ?? "-"}`
         : "none";
     const lines = [
-      `sfx: ${info(actx)}`,
+      `sfx: ${info(actx)} ok=${sfxWatch.healthy}`,
       `music(${LATENCY}): ${info(mctx)} playing=${Techno.playing}`,
       ...debugLog,
     ];
@@ -524,7 +526,8 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
-  for (const watch of watchdogs) watch(now);
+  sfxWatch.check(now);
+  musicWatch.check(now);
   update(dt);
   render(now);
   requestAnimationFrame(loop);
@@ -574,30 +577,35 @@ function makeWatchdog(name, getContext) {
   let checkAt = 0,
     lastTime = -1,
     stuckSince = 0;
-  return (now) => {
-    const c = getContext();
-    if (!c || document.hidden || now - checkAt < 100) return;
-    checkAt = now;
-    if (c.state !== "running") {
-      if (lastTime !== -1) dbg(`${name} watchdog resume (${c.state})`);
-      resumeContext(c, name);
-      lastTime = -1;
-      return;
-    }
-    if (c.currentTime !== lastTime) {
-      lastTime = c.currentTime;
-      stuckSince = now;
-    } else if (now - stuckSince > 300) {
-      dbg(`${name} stalled at t=${c.currentTime.toFixed(2)}, restart`);
-      c.suspend().then(() => c.resume());
-      lastTime = -1;
-    }
+  const watch = {
+    healthy: false,
+    check(now) {
+      const c = getContext();
+      if (!c || document.hidden || now - checkAt < 100) return;
+      checkAt = now;
+      if (c.state !== "running") {
+        if (lastTime !== -1) dbg(`${name} watchdog resume (${c.state})`);
+        resumeContext(c, name);
+        lastTime = -1;
+        watch.healthy = false;
+        return;
+      }
+      if (c.currentTime !== lastTime) {
+        if (lastTime !== -1) watch.healthy = true;
+        lastTime = c.currentTime;
+        stuckSince = now;
+      } else if (now - stuckSince > 300) {
+        dbg(`${name} stalled at t=${c.currentTime.toFixed(2)}, restart`);
+        c.suspend().then(() => c.resume());
+        lastTime = -1;
+        watch.healthy = false;
+      }
+    },
   };
+  return watch;
 }
-const watchdogs = [
-  makeWatchdog("sfx", () => actx),
-  makeWatchdog("music", () => mctx),
-];
+const sfxWatch = makeWatchdog("sfx", () => actx),
+  musicWatch = makeWatchdog("music", () => mctx);
 if (DEBUG)
   for (const ev of [
     "pointerdown",
