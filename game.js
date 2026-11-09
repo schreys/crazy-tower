@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "7";
+const VERSION = "8";
 const DEBUG = new URLSearchParams(location.search).has("debug");
 const debugLog = [];
 function dbg(msg) {
@@ -561,23 +561,25 @@ function unlockAudio(e) {
 // Chrome Android suspends the context on focus loss (e.g. screenshot) without visibilitychange,
 // and sometimes reports "running" while the clock never advances. Sticky activation allows resume().
 let audioCheckAt = 0,
-  audioLastTime = -1;
+  audioLastTime = -1,
+  audioStuckSince = 0;
 function keepAudioAlive(now) {
-  if (!actx || document.hidden || now - audioCheckAt < 1000) return;
+  if (!actx || document.hidden || now - audioCheckAt < 250) return;
   audioCheckAt = now;
   if (actx.state !== "running") {
-    dbg(`watchdog resume (${actx.state})`);
+    if (audioLastTime !== -1) dbg(`watchdog resume (${actx.state})`);
     actx.resume().catch((err) => dbg(`resume fail ${err}`));
     audioLastTime = -1;
     return;
   }
-  if (actx.currentTime === audioLastTime) {
+  if (actx.currentTime !== audioLastTime) {
+    audioLastTime = actx.currentTime;
+    audioStuckSince = now;
+  } else if (now - audioStuckSince > 600) {
     dbg(`watchdog stalled at t=${actx.currentTime.toFixed(2)}, restart`);
     actx.suspend().then(() => actx.resume());
     audioLastTime = -1;
-    return;
   }
-  audioLastTime = actx.currentTime;
 }
 if (DEBUG)
   for (const ev of [
