@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "8";
+const VERSION = "9";
 const DEBUG = new URLSearchParams(location.search).has("debug");
 const debugLog = [];
 function dbg(msg) {
@@ -564,7 +564,7 @@ let audioCheckAt = 0,
   audioLastTime = -1,
   audioStuckSince = 0;
 function keepAudioAlive(now) {
-  if (!actx || document.hidden || now - audioCheckAt < 250) return;
+  if (!actx || document.hidden || now - audioCheckAt < 100) return;
   audioCheckAt = now;
   if (actx.state !== "running") {
     if (audioLastTime !== -1) dbg(`watchdog resume (${actx.state})`);
@@ -575,7 +575,7 @@ function keepAudioAlive(now) {
   if (actx.currentTime !== audioLastTime) {
     audioLastTime = actx.currentTime;
     audioStuckSince = now;
-  } else if (now - audioStuckSince > 600) {
+  } else if (now - audioStuckSince > 300) {
     dbg(`watchdog stalled at t=${actx.currentTime.toFixed(2)}, restart`);
     actx.suspend().then(() => actx.resume());
     audioLastTime = -1;
