@@ -1,11 +1,11 @@
 const cv = document.getElementById("game");
-const VERSION = "4";
+const VERSION = "5";
 const DEBUG = new URLSearchParams(location.search).has("debug");
 const debugLog = [];
 function dbg(msg) {
   if (!DEBUG) return;
   debugLog.push(`${(performance.now() / 1000).toFixed(2)} ${msg}`);
-  if (debugLog.length > 10) debugLog.shift();
+  if (debugLog.length > 16) debugLog.shift();
 }
 const ctx = cv.getContext("2d");
 const W = 480,
@@ -500,7 +500,9 @@ function render(now) {
     ctx.font = "13px monospace";
     ctx.textAlign = "left";
     ctx.fillStyle = "#0f0";
-    lines.forEach((l, i) => ctx.fillText(l, 6, H - 16 * lines.length - 10 + i * 16));
+    lines.forEach((l, i) =>
+      ctx.fillText(l, 6, H - 16 * lines.length - 10 + i * 16),
+    );
   }
 }
 
@@ -534,7 +536,18 @@ function unlockAudio(e) {
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
     dbg(`create on ${e.type} -> ${actx.state}`);
-    actx.onstatechange = () => dbg(`state -> ${actx.state}`);
+    actx.onstatechange = () => {
+      dbg(`state -> ${actx.state}`);
+      // Chrome on Android sometimes suspends a fresh context by itself; take it back.
+      if (actx.state !== "running" && !document.hidden)
+        setTimeout(() => {
+          if (actx.state !== "running" && !document.hidden)
+            actx.resume().then(
+              () => dbg(`auto-resume -> ${actx.state}`),
+              (err) => dbg(`auto-resume fail ${err}`),
+            );
+        }, 300);
+    };
     Techno.init(actx);
   }
   if (actx.state !== "running")
@@ -544,10 +557,20 @@ function unlockAudio(e) {
     );
 }
 if (DEBUG)
-  for (const ev of ["pointerdown", "pointerup", "pointercancel", "touchend", "touchcancel", "click"])
+  for (const ev of [
+    "pointerdown",
+    "pointerup",
+    "pointercancel",
+    "touchend",
+    "touchcancel",
+    "click",
+  ])
     addEventListener(
       ev,
-      (e) => dbg(`${e.type}${e.pointerType ? "/" + e.pointerType : ""} act=${navigator.userActivation?.isActive}`),
+      (e) =>
+        dbg(
+          `${e.type}${e.pointerType ? "/" + e.pointerType : ""} act=${navigator.userActivation?.isActive}`,
+        ),
       true,
     );
 for (const ev of ["pointerup", "touchend", "click", "keydown"])
