@@ -1,8 +1,8 @@
 const cv = document.getElementById("game");
-const VERSION = "13";
+const VERSION = "14";
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has("debug");
-// ?latency=interactive (browser default) or balanced, to compare with playback.
+// ?latency=interactive|balanced overrides the music context's latencyHint, for comparison.
 const LATENCY = ["interactive", "balanced"].includes(params.get("latency"))
   ? params.get("latency")
   : "playback";
@@ -64,7 +64,10 @@ let state = "title",
 let best = +localStorage.getItem("crazyTowerBest") || 0;
 
 // ---------- audio ----------
-let actx = null;
+// Effects get a low-latency context; music uses "playback" because Chrome Android's
+// low-latency path often stalls on first start, which is only noticeable for music.
+let actx = null,
+  mctx = null;
 function beep(f, d = 0.1, type = "square", vol = 0.07, slideTo = 0, delay = 0) {
   if (!actx) return;
   const t0 = actx.currentTime + delay;
@@ -496,9 +499,13 @@ function render(now) {
   }
 
   if (DEBUG) {
+    const info = (c) =>
+      c
+        ? `${c.state} t=${c.currentTime.toFixed(2)} out=${c.outputLatency?.toFixed(3) ?? "-"}`
+        : "none";
     const lines = [
-      `ctx=${actx ? actx.state : "none"} t=${actx ? actx.currentTime.toFixed(2) : "-"} music=${Techno.playing}`,
-      `hint=${LATENCY} base=${actx?.baseLatency?.toFixed(3) ?? "-"} out=${actx?.outputLatency?.toFixed(3) ?? "-"}`,
+      `sfx: ${info(actx)}`,
+      `music(${LATENCY}): ${info(mctx)} playing=${Techno.playing}`,
       ...debugLog,
     ];
     ctx.fillStyle = "rgba(0,0,0,.7)";
@@ -517,7 +524,7 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
-  keepAudioAlive(now);
+  for (const watch of watchdogs) watch(now);
   update(dt);
   render(now);
   requestAnimationFrame(loop);
@@ -538,54 +545,59 @@ addEventListener("keydown", (e) => {
   }
 });
 cv.addEventListener("pointerdown", press);
+function newContext(name, options, onRunning) {
+  const c = new (window.AudioContext || window.webkitAudioContext)(options);
+  c.onstatechange = () => {
+    dbg(`${name} -> ${c.state}`);
+    if (c.state === "running") onRunning?.();
+  };
+  return c;
+}
+function resumeContext(c, name) {
+  if (c.state !== "running")
+    c.resume().catch((err) => dbg(`${name} resume fail ${err}`));
+}
 // Touch pointerdown is not a user-activation event in Chrome; pointerup/touchend then complete the unlock.
 function unlockAudio(e) {
   if (!actx) {
-    // Default "interactive" uses Chrome Android's low-latency path, which often stalled on first start.
-    actx = new (window.AudioContext || window.webkitAudioContext)({
-      latencyHint: LATENCY,
-    });
-    dbg(
-      `create on ${e.type} -> ${actx.state} hint=${LATENCY} base=${actx.baseLatency?.toFixed(3)}`,
-    );
-    actx.onstatechange = () => {
-      dbg(`state -> ${actx.state}`);
-      if (actx.state === "running") Techno.resume();
-    };
-    Techno.init(actx);
+    actx = newContext("sfx", {});
+    mctx = newContext("music", { latencyHint: LATENCY }, () => Techno.resume());
+    dbg(`create on ${e.type}`);
+    Techno.init(mctx);
   }
-  if (actx.state !== "running")
-    actx.resume().then(
-      () => {
-        dbg(`resume ok -> ${actx.state}`);
-        if (actx.state === "running") Techno.resume();
-      },
-      (err) => dbg(`resume fail ${err}`),
-    );
+  resumeContext(actx, "sfx");
+  resumeContext(mctx, "music");
 }
-// Chrome Android suspends the context on focus loss (e.g. screenshot) without visibilitychange,
+// Chrome Android suspends contexts on focus loss (e.g. screenshot) without visibilitychange,
 // and sometimes reports "running" while the clock never advances. Sticky activation allows resume().
-let audioCheckAt = 0,
-  audioLastTime = -1,
-  audioStuckSince = 0;
-function keepAudioAlive(now) {
-  if (!actx || document.hidden || now - audioCheckAt < 100) return;
-  audioCheckAt = now;
-  if (actx.state !== "running") {
-    if (audioLastTime !== -1) dbg(`watchdog resume (${actx.state})`);
-    actx.resume().catch((err) => dbg(`resume fail ${err}`));
-    audioLastTime = -1;
-    return;
-  }
-  if (actx.currentTime !== audioLastTime) {
-    audioLastTime = actx.currentTime;
-    audioStuckSince = now;
-  } else if (now - audioStuckSince > 300) {
-    dbg(`watchdog stalled at t=${actx.currentTime.toFixed(2)}, restart`);
-    actx.suspend().then(() => actx.resume());
-    audioLastTime = -1;
-  }
+function makeWatchdog(name, getContext) {
+  let checkAt = 0,
+    lastTime = -1,
+    stuckSince = 0;
+  return (now) => {
+    const c = getContext();
+    if (!c || document.hidden || now - checkAt < 100) return;
+    checkAt = now;
+    if (c.state !== "running") {
+      if (lastTime !== -1) dbg(`${name} watchdog resume (${c.state})`);
+      resumeContext(c, name);
+      lastTime = -1;
+      return;
+    }
+    if (c.currentTime !== lastTime) {
+      lastTime = c.currentTime;
+      stuckSince = now;
+    } else if (now - stuckSince > 300) {
+      dbg(`${name} stalled at t=${c.currentTime.toFixed(2)}, restart`);
+      c.suspend().then(() => c.resume());
+      lastTime = -1;
+    }
+  };
 }
+const watchdogs = [
+  makeWatchdog("sfx", () => actx),
+  makeWatchdog("music", () => mctx),
+];
 if (DEBUG)
   for (const ev of [
     "pointerdown",
@@ -607,7 +619,10 @@ for (const ev of ["pointerdown", "pointerup", "touchend", "click", "keydown"])
   addEventListener(ev, unlockAudio, true);
 document.addEventListener("visibilitychange", () => {
   // Never create the context here: there's no user gesture, so it would start blocked.
-  if (!document.hidden && actx && actx.state !== "running") actx.resume();
+  if (!document.hidden && actx) {
+    resumeContext(actx, "sfx");
+    resumeContext(mctx, "music");
+  }
 });
 document.getElementById("btn").addEventListener("pointerdown", (e) => {
   e.preventDefault();
