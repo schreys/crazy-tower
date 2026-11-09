@@ -171,6 +171,9 @@ const Techno = (() => {
       clearInterval(timerId);
       timerId = null;
     },
+    get playing() {
+      return timerId !== null;
+    },
     setLevel(level, total) {
       intensity = level / total;
       bpm = 126 + 24 * intensity;

@@ -1,5 +1,12 @@
 const cv = document.getElementById("game");
-const VERSION = "3";
+const VERSION = "4";
+const DEBUG = new URLSearchParams(location.search).has("debug");
+const debugLog = [];
+function dbg(msg) {
+  if (!DEBUG) return;
+  debugLog.push(`${(performance.now() / 1000).toFixed(2)} ${msg}`);
+  if (debugLog.length > 10) debugLog.shift();
+}
 const ctx = cv.getContext("2d");
 const W = 480,
   H = 800,
@@ -482,6 +489,19 @@ function render(now) {
     if (blink && timer > 1)
       text("DRUK OM OPNIEUW TE SPELEN", W / 2, 540, 20, "#3cf");
   }
+
+  if (DEBUG) {
+    const lines = [
+      `ctx=${actx ? actx.state : "none"} t=${actx ? actx.currentTime.toFixed(2) : "-"} music=${Techno.playing}`,
+      ...debugLog,
+    ];
+    ctx.fillStyle = "rgba(0,0,0,.7)";
+    ctx.fillRect(0, H - 16 * lines.length - 30, W, 16 * lines.length + 30);
+    ctx.font = "13px monospace";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#0f0";
+    lines.forEach((l, i) => ctx.fillText(l, 6, H - 16 * lines.length - 10 + i * 16));
+  }
 }
 
 // ---------- loop & input ----------
@@ -510,17 +530,31 @@ addEventListener("keydown", (e) => {
 });
 cv.addEventListener("pointerdown", press);
 // Mobile browsers only allow audio to start on pointerup/touchend/click/keydown, not on pointerdown.
-function unlockAudio() {
+function unlockAudio(e) {
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
+    dbg(`create on ${e.type} -> ${actx.state}`);
+    actx.onstatechange = () => dbg(`state -> ${actx.state}`);
     Techno.init(actx);
   }
-  if (actx.state !== "running") actx.resume();
+  if (actx.state !== "running")
+    actx.resume().then(
+      () => dbg(`resume ok -> ${actx.state}`),
+      (err) => dbg(`resume fail ${err}`),
+    );
 }
+if (DEBUG)
+  for (const ev of ["pointerdown", "pointerup", "pointercancel", "touchend", "touchcancel", "click"])
+    addEventListener(
+      ev,
+      (e) => dbg(`${e.type}${e.pointerType ? "/" + e.pointerType : ""} act=${navigator.userActivation?.isActive}`),
+      true,
+    );
 for (const ev of ["pointerup", "touchend", "click", "keydown"])
   addEventListener(ev, unlockAudio, true);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) unlockAudio();
+  // Never create the context here: there's no user gesture, so it would start blocked.
+  if (!document.hidden && actx && actx.state !== "running") actx.resume();
 });
 document.getElementById("btn").addEventListener("pointerdown", (e) => {
   e.preventDefault();
