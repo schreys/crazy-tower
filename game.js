@@ -511,9 +511,14 @@ addEventListener("keydown", (e) => {
   }
 });
 cv.addEventListener("pointerdown", press);
-// iOS Safari only unlocks audio on touchend.
-addEventListener("touchend", () => {
-  if (actx && actx.state === "suspended") actx.resume();
+// Mobile browsers only allow audio to start on pointerup/touchend/click, not on pointerdown.
+function unlockAudio() {
+  if (actx && actx.state !== "running") actx.resume();
+}
+for (const ev of ["pointerup", "touchend", "click", "keydown"])
+  addEventListener(ev, unlockAudio, true);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) unlockAudio();
 });
 document.getElementById("btn").addEventListener("pointerdown", (e) => {
   e.preventDefault();
