@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "12";
+const VERSION = "13";
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has("debug");
 // ?latency=interactive (browser default) or balanced, to compare with playback.
@@ -498,6 +498,7 @@ function render(now) {
   if (DEBUG) {
     const lines = [
       `ctx=${actx ? actx.state : "none"} t=${actx ? actx.currentTime.toFixed(2) : "-"} music=${Techno.playing}`,
+      `hint=${LATENCY} base=${actx?.baseLatency?.toFixed(3) ?? "-"} out=${actx?.outputLatency?.toFixed(3) ?? "-"}`,
       ...debugLog,
     ];
     ctx.fillStyle = "rgba(0,0,0,.7)";
