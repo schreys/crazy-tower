@@ -1,6 +1,11 @@
 const cv = document.getElementById("game");
-const VERSION = "11";
-const DEBUG = new URLSearchParams(location.search).has("debug");
+const VERSION = "12";
+const params = new URLSearchParams(location.search);
+const DEBUG = params.has("debug");
+// ?latency=interactive (browser default) or balanced, to compare with playback.
+const LATENCY = ["interactive", "balanced"].includes(params.get("latency"))
+  ? params.get("latency")
+  : "playback";
 const debugLog = [];
 function dbg(msg) {
   if (!DEBUG) return;
@@ -537,10 +542,10 @@ function unlockAudio(e) {
   if (!actx) {
     // Default "interactive" uses Chrome Android's low-latency path, which often stalled on first start.
     actx = new (window.AudioContext || window.webkitAudioContext)({
-      latencyHint: "playback",
+      latencyHint: LATENCY,
     });
     dbg(
-      `create on ${e.type} -> ${actx.state} base=${actx.baseLatency?.toFixed(3)}`,
+      `create on ${e.type} -> ${actx.state} hint=${LATENCY} base=${actx.baseLatency?.toFixed(3)}`,
     );
     actx.onstatechange = () => {
       dbg(`state -> ${actx.state}`);
