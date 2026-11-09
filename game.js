@@ -1,5 +1,5 @@
 const cv = document.getElementById("game");
-const VERSION = "10";
+const VERSION = "11";
 const DEBUG = new URLSearchParams(location.search).has("debug");
 const debugLog = [];
 function dbg(msg) {
@@ -535,6 +535,7 @@ cv.addEventListener("pointerdown", press);
 // Touch pointerdown is not a user-activation event in Chrome; pointerup/touchend then complete the unlock.
 function unlockAudio(e) {
   if (!actx) {
+    // Default "interactive" uses Chrome Android's low-latency path, which often stalled on first start.
     actx = new (window.AudioContext || window.webkitAudioContext)({
       latencyHint: "playback",
     });
@@ -547,12 +548,7 @@ function unlockAudio(e) {
     };
     Techno.init(actx);
   }
-  if (actx.state !== "running") {
-    // A silent buffer started inside the gesture helps Chrome Android open the output stream.
-    const src = actx.createBufferSource();
-    src.buffer = actx.createBuffer(1, 1, 22050);
-    src.connect(actx.destination);
-    src.start();
+  if (actx.state !== "running")
     actx.resume().then(
       () => {
         dbg(`resume ok -> ${actx.state}`);
@@ -560,7 +556,6 @@ function unlockAudio(e) {
       },
       (err) => dbg(`resume fail ${err}`),
     );
-  }
 }
 // Chrome Android suspends the context on focus loss (e.g. screenshot) without visibilitychange,
 // and sometimes reports "running" while the clock never advances. Sticky activation allows resume().
